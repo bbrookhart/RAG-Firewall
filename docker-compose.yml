@@ -1,0 +1,106 @@
+version: "3.9"
+
+services:
+  # ── Vector Store ──────────────────────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.9.2
+    container_name: ragfw-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__LOG_LEVEL: INFO
+      QDRANT__TELEMETRY_DISABLED: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Audit Database ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: ragfw-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ragfw}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ragfw_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-ragfw_audit}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/01_init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ragfw} -d ${POSTGRES_DB:-ragfw_audit}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── RAG Firewall API ──────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: ragfw-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-ragfw}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ragfw_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-ragfw_audit}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENV: ${ENV:-development}
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - model_cache:/app/.model_cache
+      - ./config:/app/config:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # ── Monitoring Dashboard ──────────────────────────────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dashboard
+    container_name: ragfw-dashboard
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      API_BASE_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    profiles:
+      - dashboard  # opt-in: docker-compose --profile dashboard up
+
+volumes:
+  qdrant_data:
+  postgres_data:
+  model_cache:
+
+networks:
+  default:
+    name: ragfw-network

@@ -1,0 +1,91 @@
+# RAG Firewall — Default Pipeline Configuration
+# Override any value via environment variables or a profile-specific yaml.
+# Profile files: config/strict.yaml, config/permissive.yaml
+
+pipeline:
+  # Stages to enable. Order determines execution sequence.
+  stages:
+    - injection_classifier   # Stage 1 — always first
+    - trust_scorer           # Stage 2
+    - consistency_checker    # Stage 3 (Phase 2)
+    - provenance_validator   # Stage 4 (Phase 2)
+    - output_guard           # Stage 5 (post-generation)
+
+  # Global chunk processing
+  max_chunks_per_query: 8
+  chunk_min_tokens: 20       # Ignore near-empty chunks
+  chunk_max_tokens: 1024     # Truncate very long chunks before scoring
+
+# ── Stage 1: Injection Classifier ─────────────────────────────────────────────
+injection_classifier:
+  enabled: true
+  model_id: "deepset/deberta-v3-base-injection"
+  use_onnx: true
+  onnx_path: ".model_cache/injection_classifier.onnx"
+  threshold: 0.80            # [0,1] — above this → flagged
+  hard_block: true           # false = quarantine + warn, true = drop chunk entirely
+  patterns:                  # Supplementary regex heuristics (fast pre-filter)
+    - "(?i)ignore (all )?(previous|prior|above) instructions?"
+    - "(?i)(system prompt|system message)[:\\s]"
+    - "(?i)you are now (a |an )?(different|new|another)? ?(ai|assistant|model|gpt)"
+    - "(?i)disregard (your )?(previous|prior|original) (instructions?|training|directives?)"
+    - "(?i)(act as|pretend (you are|to be)|roleplay as)"
+    - "(?i)\\[INST\\]|<\\|im_start\\|>|<\\|system\\|>"
+    - "(?i)(override|bypass|circumvent|jailbreak)"
+    - "(?i)```\\s*(json|python|bash)?\\s*\\{\\s*\"role\"\\s*:\\s*\"system\""
+
+# ── Stage 2: Trust Scorer (stub for Phase 1) ──────────────────────────────────
+trust_scorer:
+  enabled: false             # Enabled in Phase 2
+  composite_threshold: 0.75
+  weights:
+    source_authority: 0.30
+    freshness: 0.15
+    corpus_agreement: 0.30
+    retrieval_rank: 0.25
+  freshness:
+    max_age_days: 365        # Documents older than this receive score 0
+    decay: "exponential"
+
+# ── Stage 3: Consistency Checker (stub) ───────────────────────────────────────
+consistency_checker:
+  enabled: false
+  model_id: "cross-encoder/nli-deberta-v3-base"
+  contradiction_threshold: 0.85
+  check_top_k_pairs: 10
+
+# ── Stage 4: Provenance Validator (stub) ──────────────────────────────────────
+provenance_validator:
+  enabled: false
+  trusted_domain_list: "config/trusted_domains.txt"
+  require_hash_match: false  # true = only allow pre-registered documents
+
+# ── Stage 5: Output Guard (stub) ──────────────────────────────────────────────
+output_guard:
+  enabled: false
+  groundedness_threshold: 0.70
+  detect_pii: true
+  detect_instruction_leak: true
+
+# ── Vector Store ──────────────────────────────────────────────────────────────
+vector_store:
+  collection: "ragfw_chunks"
+  quarantine_collection: "ragfw_quarantine"
+  distance: "Cosine"
+  embedding_dim: 384
+  on_disk_payload: true      # Keep metadata on disk for large corpora
+  hnsw_config:
+    m: 16
+    ef_construct: 100
+
+# ── Audit Logging ─────────────────────────────────────────────────────────────
+audit:
+  enabled: true
+  retention_days: 90
+  log_chunk_content: true    # false in high-privacy deployments
+  log_embeddings: false
+
+# ── Rate Limiting ─────────────────────────────────────────────────────────────
+rate_limit:
+  requests_per_minute: 60
+  burst: 10

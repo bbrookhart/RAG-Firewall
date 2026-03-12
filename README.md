@@ -19,7 +19,6 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11+-1a1a2e?style=for-the-badge&logo=python&logoColor=4fc3f7)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-1a1a2e?style=for-the-badge&logo=fastapi&logoColor=4fc3f7)](https://fastapi.tiangolo.com)
-[![License](https://img.shields.io/badge/License-Apache_2.0-1a1a2e?style=for-the-badge&logoColor=4fc3f7)](LICENSE)
 [![OWASP](https://img.shields.io/badge/OWASP-Agentic_Top_10-1a1a2e?style=for-the-badge&logoColor=e94560)](https://owasp.org)
 [![NIST](https://img.shields.io/badge/NIST-GenAI_Profile-1a1a2e?style=for-the-badge&logoColor=e94560)](https://airc.nist.gov)
 [![Status](https://img.shields.io/badge/Status-Active_Research-1a1a2e?style=for-the-badge&logo=statuspage&logoColor=4ade80)](https://github.com)
